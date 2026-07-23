@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>高效學習卡組 - Smart Learning Cards</title>
+  
+  <link rel="apple-touch-icon" href="logo.png">
+  <link rel="icon" type="image/png" href="logo.png">
+
+  <!-- Tailwind CSS & React CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      background-color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const apiKey = ""; 
+
+    async function callGeminiAPI(promptText, systemInstruction = "") {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [{ parts: [{ text: promptText }] }],
+        systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined
+      };
+
+      let retries = 5, delay = 1000;
+      for (let i = 0; i < retries; i++) {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+          const result = await response.json();
+          return result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } catch (err) {
+          if (i === retries - 1) throw err;
+          await new Promise(res => setTimeout(res, delay));
+          delay *= 2;
+        }
+      }
+    }
+
+    function BrainLogo({ className = "w-10 h-10" }) {
+      return (
+        <svg className={className} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100" height="100" rx="28" fill="url(#blue-apple-brain)"/>
+          <circle cx="50" cy="50" r="38" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+          <path d="M38 35C33 35 29 39 29 44C29 46.5 30 48.7 31.5 50.3C30 51.8 29 54 29 56.5C29 61.2 32.8 65 37.5 65C38.6 65 39.6 64.8 40.5 64.4C41.8 68.2 45.4 71 49.7 71C53 71 55.8 69.4 57.5 67C59 68.2 60.8 69 62.8 69C67.8 69 71.8 65 71.8 60C71.8 58.8 71.5 57.6 71 56.5C73.3 54.8 74.8 52 74.8 48.8C74.8 44.2 71 40.5 66.4 40.5C65.8 40.5 65.3 40.6 64.8 40.7C63.4 36.8 59.7 34 55.3 34C52.4 34 49.8 35.4 48.1 37.5C46.7 36.6 45 36 43.1 36C41.2 36 39.5 36.6 38.1 37.6Z" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M50 35V71M37 45C43 45 50 41 50 41M35 56C42 56 50 52 50 52M63 45C57 45 50 49 50 49M65 56C58 56 50 60 50 60" stroke="white" strokeWidth="2.5" opacity="0.85" strokeLinecap="round"/>
+          <circle cx="38" cy="44" r="2.5" fill="#38BDF8"/>
+          <circle cx="66" cy="40.5" r="2.5" fill="#38BDF8"/>
+          <circle cx="50" cy="71" r="2.5" fill="#38BDF8"/>
+          <defs>
+            <linearGradient id="blue-apple-brain" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#007AFF"/>
+              <stop offset="0.6" stopColor="#2563EB"/>
+              <stop offset="1" stopColor="#0F172A"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      );
+    }
+
+    const DECK_COLORS = [
+      { id: 'sky', name: '晴空藍', color: 'from-slate-50 to-sky-50/80', borderColor: 'border-sky-200/80', accentBg: 'bg-sky-600' },
+      { id: 'indigo', name: '極光藍', color: 'from-slate-50 to-indigo-50/80', borderColor: 'border-indigo-200/80', accentBg: 'bg-indigo-600' },
+      { id: 'teal', name: '鼠尾草綠', color: 'from-slate-50 to-teal-50/80', borderColor: 'border-teal-200/80', accentBg: 'bg-teal-600' },
+      { id: 'amber', name: '暖陽杏', color: 'from-slate-50 to-amber-50/80', borderColor: 'border-amber-200/80', accentBg: 'bg-amber-600' },
+      { id: 'rose', name: '柔霧粉', color: 'from-slate-50 to-rose-50/80', borderColor: 'border-rose-200/80', accentBg: 'bg-rose-600' },
+      { id: 'purple', name: '薰衣草紫', color: 'from-slate-50 to-purple-50/80', borderColor: 'border-purple-200/80', accentBg: 'bg-purple-600' }
+    ];
+
+    const TRANSLATIONS = {
+      'zh-TW': {
+        title: '高效學習卡組',
+        subtitle: 'Smart Learning Cards',
+        myDecks: '我的牌組',
+        aiAgent: 'AI 出題',
+        study: '開始複習',
+        addCard: '製作卡牌',
+        stats: '學習分析',
+        addDeck: '+ 新增牌組',
+        searchPlaceholder: '搜尋牌組或知識關鍵字...',
+        sampleButton: '✨ 載入測試範例牌組',
+        dueCards: '到期:',
+        totalCards: '總卡片',
+        mastered: '精通',
+        streak: '連續打卡天數',
+        todayCount: '今日完成複習',
+        heatmapTitle: '每日複習熱度圖 (最近 30 天)',
+        domainTitle: '領域別答對率與熟練度分析',
+        exportPack: '📦 匯出考題包 (數位變現)'
+      },
+      'en': {
+        title: 'Smart Learning Cards',
+        subtitle: 'Spaced Repetition Flashcards',
+        myDecks: 'Decks',
+        aiAgent: 'AI Agent',
+        study: 'Review',
+        addCard: 'Add Card',
+        stats: 'Analytics',
+        addDeck: '+ New Deck',
+        searchPlaceholder: 'Search decks or keywords...',
+        sampleButton: '✨ Load Sample Decks',
+        dueCards: 'Due:',
+        totalCards: 'Cards',
+        mastered: 'Mastered',
+        streak: 'Day Streak',
+        todayCount: 'Reviewed Today',
+        heatmapTitle: 'Daily Review Activity (Last 30 Days)',
+        domainTitle: 'Category Mastery & Progress',
+        exportPack: '📦 Export Card Pack'
+      }
+    };
+
+    function App() {
+      const [lang, setLang] = useState('zh-TW');
+      const t = TRANSLATIONS[lang] || TRANSLATIONS['zh-TW'];
+
+      const [decks, setDecks] = useState([]);
+      const [cards, setCards] = useState([]);
+      const [reviewLogs, setReviewLogs] = useState({});
+
+      const [activeTab, setActiveTab] = useState('decks');
+      const [selectedDeckId, setSelectedDeckId] = useState(null);
+      const [searchQuery, setSearchQuery] = useState('');
+
+      const [studyQueue, setStudyQueue] = useState([]);
+      const [currentCardIndex, setCurrentCardIndex] = useState(0);
+      const [isFlipped, setIsFlipped] = useState(false);
+      const [showHint, setShowHint] = useState(false);
+      const [sessionCompleted, setSessionCompleted] = useState(false);
+
+      const [aiTopic, setAiTopic] = useState('');
+      const [aiGeneratedCards, setAiGeneratedCards] = useState([]);
+      const [isAiGenerating, setIsAiGenerating] = useState(false);
+      const [aiTargetDeckId, setAiTargetDeckId] = useState('');
+
+      const [showDeckModal, setShowDeckModal] = useState(false);
+      const [editingDeck, setEditingDeck] = useState(null);
+      const [deckTitle, setDeckTitle] = useState('');
+      const [deckCategory, setDeckCategory] = useState('');
+      const [deckDesc, setDeckDesc] = useState('');
+      const [deckColorId, setDeckColorId] = useState('sky');
+
+      const [cardDeckId, setCardDeckId] = useState('');
+      const [cardFront, setCardFront] = useState('');
+      const [cardFrontImg, setCardFrontImg] = useState('');
+      const [cardBack, setCardBack] = useState('');
+      const [cardBackImg, setCardBackImg] = useState('');
+      const [cardHint, setCardHint] = useState('');
+      const [cardTags, setCardTags] = useState('');
+
+      useEffect(() => {
+        if (decks.length > 0 && !cardDeckId) {
+          setCardDeckId(decks[0].id);
+          setAiTargetDeckId(decks[0].id);
+        }
+      }, [decks]);
+
+      const getStreakCount = () => {
+        let streak = 0;
+        let check = new Date();
+        for (let i = 0; i < 365; i++) {
+          const dateStr = check.toISOString().split('T')[0];
+          if (reviewLogs[dateStr] > 0) {
+            streak++;
+            check.setDate(check.getDate() - 1);
+          } else {
+            if (i === 0) {
+              check.setDate(check.getDate() - 1);
+              continue;
+            }
+            break;
+          }
+        }
+        return streak;
+      };
+
+      const handleLoadSampleData = () => {
+        const sampleDeckId = `deck-sample-${Date.now()}`;
+        const sampleDeck = {
+          id: sampleDeckId,
+          title: '🎓 核心考題與重點牌組範例',
+          category: '通用考題',
+          description: '支援星星置頂、多國語言與 SM-2 間隔重複。',
+          colorId: 'sky',
+          isStarred: true,
+          createdAt: new Date().toISOString()
+        };
+
+        const sampleCard = {
+          id: `c-${Date.now()}`,
+          deckId: sampleDeckId,
+          front: '如何將此牌組匯出成 JSON 考題包？',
+          frontImg: '',
+          back: '在「學習分析」點擊「📦 匯出考題包」，即可將產出的題庫下載備份！',
+          backImg: '',
+          hint: '點擊卡片可翻面',
+          tags: ['操作指南'],
+          interval: 1,
+          easeFactor: 2.5,
+          repetitions: 0,
+          dueDate: new Date().toISOString().split('T')[0],
+          status: 'new'
+        };
+
+        setDecks([sampleDeck, ...decks]);
+        setCards([sampleCard, ...cards]);
+      };
+
+      const handleSaveDeck = (e) => {
+        e.preventDefault();
+        if (!deckTitle.trim()) return;
+
+        if (editingDeck) {
+          setDecks(decks.map(d => d.id === editingDeck.id ? {
+            ...d, title: deckTitle, category: deckCategory || '通用分類', description: deckDesc, colorId: deckColorId
+          } : d));
+        } else {
+          const newDeck = {
+            id: `deck-${Date.now()}`,
+            title: deckTitle,
+            category: deckCategory || '通用分類',
+            description: deckDesc,
+            colorId: deckColorId,
+            isStarred: false,
+            createdAt: new Date().toISOString()
+          };
+          setDecks([newDeck, ...decks]);
+        }
+        closeDeckModal();
+      };
+
+      // 點擊星星 toggle，有星星者自動排在最前面
+      const toggleStarDeck = (deckId, e) => {
+        e.stopPropagation();
+        setDecks(decks.map(d => d.id === deckId ? { ...d, isStarred: !d.isStarred } : d));
+      };
+
+      // 同一分類內手動微調順序 (▲ / ▼)
+      const moveDeckOrder = (index, direction, e) => {
+        e.stopPropagation();
+        const sorted = getSortedDecks();
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+        // 在原始 decks 中找到對應的兩個 deck 並交換位置
+        const currentId = sorted[index].id;
+        const targetId = sorted[targetIndex].id;
+        
+        const origIndex1 = decks.findIndex(d => d.id === currentId);
+        const origIndex2 = decks.findIndex(d => d.id === targetId);
+
+        const updated = [...decks];
+        const temp = updated[origIndex1];
+        updated[origIndex1] = updated[origIndex2];
+        updated[origIndex2] = temp;
+        setDecks(updated);
+      };
+
+      // 排序邏輯：有星星 (isStarred) 的永遠排在最前面
+      const getSortedDecks = () => {
+        return [...decks].sort((a, b) => {
+          if (a.isStarred && !b.isStarred) return -1;
+          if (!a.isStarred && b.isStarred) return 1;
+          return 0;
+        });
+      };
+
+      const handleDeleteDeck = (deckId, e) => {
+        if (e) e.stopPropagation();
+        if (!window.confirm('確定要徹底刪除此牌組及其所有卡片嗎？')) return;
+        setDecks(prev => prev.filter(d => d.id !== deckId));
+        setCards(prev => prev.filter(c => c.deckId !== deckId));
+      };
+
+      const openEditDeckModal = (deck, e) => {
+        if (e) e.stopPropagation();
+        setEditingDeck(deck);
+        setDeckTitle(deck.title);
+        setDeckCategory(deck.category);
+        setDeckDesc(deck.description || '');
+        setDeckColorId(deck.colorId || 'sky');
+        setShowDeckModal(true);
+      };
+
+      const closeDeckModal = () => {
+        setShowDeckModal(false);
+        setEditingDeck(null);
+        setDeckTitle('');
+        setDeckCategory('');
+        setDeckDesc('');
+        setDeckColorId('sky');
+      };
+
+      const handleImageUpload = (e, setImageState) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => setImageState(reader.result);
+        reader.readAsDataURL(file);
+      };
+
+      const handleCreateCard = (e) => {
+        e.preventDefault();
+        if (!cardFront.trim() || !cardBack.trim() || !cardDeckId) return;
+
+        const newCard = {
+          id: `c-${Date.now()}`,
+          deckId: cardDeckId,
+          front: cardFront,
+          frontImg: cardFrontImg,
+          back: cardBack,
+          backImg: cardBackImg,
+          hint: cardHint,
+          tags: cardTags ? cardTags.split(',').map(t => t.trim()) : ['自訂'],
+          interval: 1,
+          easeFactor: 2.5,
+          repetitions: 0,
+          dueDate: new Date().toISOString().split('T')[0],
+          status: 'new',
+          createdAt: new Date().toISOString()
+        };
+
+        setCards([...cards, newCard]);
+        setCardFront('');
+        setCardFrontImg('');
+        setCardBack('');
+        setCardBackImg('');
+        setCardHint('');
+        setCardTags('');
+        alert('✨ 成功新增記憶卡片！');
+      };
+
+      const handleAiGenerateCards = async () => {
+        if (!aiTopic.trim()) return alert('請輸入學習主題關鍵字！');
+        setIsAiGenerating(true);
+        setAiGeneratedCards([]);
+
+        const systemPrompt = `你是一位專業知識記憶卡專家。請產出 3 到 4 張高品質 JSON 格式記憶卡（不要包含 markdown 標籤）：
+[{"front": "題目", "back": "解答與解析", "hint": "提示", "tags": ["標籤"]}]`;
+
+        try {
+          const res = await callGeminiAPI(`主題：${aiTopic}`, systemPrompt);
+          const cleanJson = res.replace(/```json/g, '').replace(/```/g, '').trim();
+          setAiGeneratedCards(JSON.parse(cleanJson));
+        } catch (err) {
+          alert('AI 生成失敗，請稍後重試。');
+        } finally {
+          setIsAiGenerating(false);
+        }
+      };
+
+      const handleImportAiCards = () => {
+        if (!aiTargetDeckId) return alert('請選擇目標牌組！');
+        const batch = aiGeneratedCards.map((c, i) => ({
+          id: `c-ai-${Date.now()}-${i}`,
+          deckId: aiTargetDeckId,
+          front: c.front,
+          frontImg: '',
+          back: c.back,
+          backImg: '',
+          hint: c.hint || '',
+          tags: c.tags || ['AI生成'],
+          interval: 1,
+          easeFactor: 2.5,
+          repetitions: 0,
+          dueDate: new Date().toISOString().split('T')[0],
+          status: 'new',
+          createdAt: new Date().toISOString()
+        }));
+
+        setCards([...cards, ...batch]);
+        setAiGeneratedCards([]);
+        setAiTopic('');
+        alert(`🎉 成功將 ${batch.length} 張卡牌匯入！`);
+      };
+
+      const handleExportPack = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ decks, cards }));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", dataStr);
+        dlAnchor.setAttribute("download", `SmartLearningCards_Pack_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        dlAnchor.remove();
+      };
+
+      const startStudy = (deckId) => {
+        setSelectedDeckId(deckId);
+        const today = new Date().toISOString().split('T')[0];
+        const queue = cards.filter(c => c.deckId === deckId && c.dueDate <= today);
+        setStudyQueue(queue.length > 0 ? queue : cards.filter(c => c.deckId === deckId));
+        setCurrentCardIndex(0);
+        setIsFlipped(false);
+        setShowHint(false);
+        setSessionCompleted(false);
+        setActiveTab('study');
+      };
+
+      const handleRating = (quality) => {
+        const currentCard = studyQueue[currentCardIndex];
+        if (!currentCard) return;
+
+        let { interval, easeFactor, repetitions } = currentCard;
+        let newStatus = currentCard.status;
+
+        if (quality === 1) {
+          repetitions = 0;
+          interval = 1;
+          newStatus = 'learning';
+        } else {
+          if (repetitions === 0) {
+            interval = quality === 4 ? 4 : (quality === 3 ? 2 : 1);
+          } else {
+            interval = Math.round(interval * easeFactor * (quality === 4 ? 1.3 : 1.0));
+          }
+          easeFactor = Math.max(1.3, easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)));
+          repetitions += 1;
+          newStatus = interval >= 21 ? 'mastered' : 'review';
+        }
+
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + interval);
+        const dueDateStr = nextDate.toISOString().split('T')[0];
+
+        const today = new Date().toISOString().split('T')[0];
+        setReviewLogs(prev => ({
+          ...prev,
+          [today]: (prev[today] || 0) + 1
+        }));
+
+        setCards(cards.map(c => c.id === currentCard.id ? {
+          ...c, interval, easeFactor, repetitions, dueDate: dueDateStr, status: newStatus
+        } : c));
+
+        if (currentCardIndex + 1 < studyQueue.length) {
+          setCurrentCardIndex(prev => prev + 1);
+          setIsFlipped(false);
+          setShowHint(false);
+        } else {
+          setSessionCompleted(true);
+        }
+      };
+
+      const getDeckStats = (deckId) => {
+        const deckCards = cards.filter(c => c.deckId === deckId);
+        const today = new Date().toISOString().split('T')[0];
+        return {
+          total: deckCards.length,
+          due: deckCards.filter(c => c.dueDate <= today).length,
+          mastered: deckCards.filter(c => c.status === 'mastered').length
+        };
+      };
+
+      const getCategoryAnalytics = () => {
+        const categories = {};
+        decks.forEach(deck => {
+          const cat = deck.category || (lang === 'en' ? 'General' : '通用分類');
+          if (!categories[cat]) {
+            categories[cat] = { totalCards: 0, masteredCards: 0, reviewCards: 0, newCards: 0 };
+          }
+          const deckCards = cards.filter(c => c.deckId === deck.id);
+          deckCards.forEach(card => {
+            categories[cat].totalCards += 1;
+            if (card.status === 'mastered') categories[cat].masteredCards += 1;
+            else if (card.status === 'review' || card.status === 'learning') categories[cat].reviewCards += 1;
+            else categories[cat].newCards += 1;
+          });
+        });
+        return categories;
+      };
+
+      const getPast30Days = () => {
+        const days = [];
+        for (let i = 29; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          days.push(d.toISOString().split('T')[0]);
+        }
+        return days;
+      };
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayReviewCount = reviewLogs[todayStr] || 0;
+      const sortedDeckList = getSortedDecks().filter(d => d.title.includes(searchQuery) || (d.description && d.description.includes(searchQuery)));
+
+      return (
+        <div className="min-h-screen bg-[#F8FAFC] text-slate-800 pb-24">
+          
+          <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 sm:px-8">
+            <div className="max-w-5xl mx-auto flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <BrainLogo className="w-10 h-10 shadow-sm rounded-2xl" />
+                <div>
+                  <h1 className="text-xl font-bold text-slate-900 tracking-tight">{t.title}</h1>
+                  <p className="text-[11px] text-slate-400 font-medium">{t.subtitle}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <select 
+                  value={lang} 
+                  onChange={(e) => setLang(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-xl text-xs bg-slate-100 border border-slate-200 font-medium cursor-pointer"
+                >
+                  <option value="zh-TW">繁體中文</option>
+                  <option value="en">English</option>
+                </select>
+
+                <button 
+                  onClick={() => setActiveTab('ai-agent')}
+                  className="px-3.5 py-2 rounded-2xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-semibold border border-sky-200/60 flex items-center space-x-1"
+                >
+                  <span>🤖 {t.aiAgent}</span>
+                </button>
+                <button 
+                  onClick={() => { setEditingDeck(null); setShowDeckModal(true); }}
+                  className="px-4 py-2 rounded-2xl bg-sky-600 text-white hover:bg-sky-700 text-xs font-semibold shadow-sm flex items-center space-x-1"
+                >
+                  <span>{t.addDeck}</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-5xl mx-auto px-4 pt-6 sm:px-8">
+            
+            {/* 牌組頁面 */}
+            {activeTab === 'decks' && (
+              <div className="space-y-5">
+                
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <div className="relative w-full sm:w-80">
+                    <input 
+                      type="text" 
+                      placeholder={t.searchPlaceholder}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 shadow-xs"
+                    />
+                  </div>
+
+                  {decks.length === 0 && (
+                    <button 
+                      onClick={handleLoadSampleData}
+                      className="text-xs font-semibold text-sky-600 bg-sky-50 hover:bg-sky-100 px-4 py-2 rounded-2xl border border-sky-200/60"
+                    >
+                      {t.sampleButton}
+                    </button>
+                  )}
+                </div>
+
+                {decks.length === 0 ? (
+                  <div className="p-12 text-center bg-white rounded-[28px] border border-slate-200 shadow-xs space-y-4">
+                    <BrainLogo className="w-16 h-16 mx-auto rounded-3xl" />
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-bold text-slate-900">{t.title}</h3>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        {lang === 'en' ? 'Create custom flashcard decks with image upload and AI generation.' : '建立個人專屬記憶牌組，支援圖片上傳與 AI 靈感輔助出題。'}
+                      </p>
+                    </div>
+                    <div className="pt-2 flex justify-center gap-3">
+                      <button 
+                        onClick={() => { setEditingDeck(null); setShowDeckModal(true); }}
+                        className="px-5 py-2.5 rounded-2xl bg-sky-600 text-white font-semibold text-xs shadow-md shadow-sky-100"
+                      >
+                        {t.addDeck}
+                      </button>
+                      <button 
+                        onClick={handleLoadSampleData}
+                        className="px-5 py-2.5 rounded-2xl bg-slate-100 text-slate-700 font-semibold text-xs hover:bg-slate-200"
+                      >
+                        {t.sampleButton}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5">
+                    {sortedDeckList.map((deck, index) => {
+                      const stats = getDeckStats(deck.id);
+                      const colorTheme = DECK_COLORS.find(c => c.id === deck.colorId) || DECK_COLORS[0];
+
+                      return (
+                        <div 
+                          key={deck.id}
+                          onClick={() => startStudy(deck.id)}
+                          className={`p-5 rounded-[24px] bg-gradient-to-r ${colorTheme.color} border ${colorTheme.borderColor} shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer group`}
+                        >
+                          <div className="space-y-2 flex-1 min-w-0">
+                            <div className="flex items-center space-x-2">
+                              {/* 純星星按鈕：點擊 toggle，自動置頂 */}
+                              <button 
+                                onClick={(e) => toggleStarDeck(deck.id, e)}
+                                className="p-1 rounded-xl hover:bg-white/60 transition-colors"
+                                title={deck.isStarred ? "取消置頂" : "星星置頂"}
+                              >
+                                <span className={deck.isStarred ? 'text-amber-400 font-bold text-lg' : 'text-slate-300 text-lg hover:text-amber-400'}>
+                                  {deck.isStarred ? '★' : '☆'}
+                                </span>
+                              </button>
+
+                              {/* 上下順序微調按鈕 ▲ / ▼ */}
+                              <div className="flex items-center space-x-1 bg-white/70 px-2 py-0.5 rounded-xl border border-slate-200/60 text-xs">
+                                <button 
+                                  onClick={(e) => moveDeckOrder(index, 'up', e)}
+                                  className="text-slate-600 hover:text-sky-600 font-bold px-1"
+                                  title="向上調"
+                                >
+                                  ▲
+                                </button>
+                                <button 
+                                  onClick={(e) => moveDeckOrder(index, 'down', e)}
+                                  className="text-slate-600 hover:text-sky-600 font-bold px-1"
+                                  title="向下調"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/80 text-slate-600 border border-slate-200/50">
+                                {deck.category}
+                              </span>
+
+                              <span className="text-[11px] font-semibold text-sky-600 bg-white/90 px-2 py-0.5 rounded-lg border border-sky-100">
+                                {t.dueCards} {stats.due}
+                              </span>
+                            </div>
+
+                            <h3 className="text-base font-bold text-slate-900 group-hover:text-sky-600 transition-colors truncate">
+                              {deck.title}
+                            </h3>
+
+                            {deck.description && (
+                              <p className="text-xs text-slate-500 line-clamp-1">
+                                {deck.description}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-3 self-end sm:self-center shrink-0">
+                            <div className="hidden sm:flex items-center space-x-2 text-center text-[11px]">
+                              <div className="bg-white/80 px-2.5 py-1 rounded-xl border border-slate-200/50">
+                                <span className="text-slate-400 block text-[9px]">{t.totalCards}</span>
+                                <span className="font-bold text-slate-700">{stats.total}</span>
+                              </div>
+                              <div className="bg-white/80 px-2.5 py-1 rounded-xl border border-slate-200/50">
+                                <span className="text-emerald-500 block text-[9px]">{t.mastered}</span>
+                                <span className="font-bold text-emerald-700">{stats.mastered}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-1 border-l border-slate-200/60 pl-3">
+                              <button 
+                                onClick={(e) => openEditDeckModal(deck, e)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80 transition-all text-xs"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                onClick={(e) => handleDeleteDeck(deck.id, e)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all text-xs"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+
+                            <div className="p-2 rounded-2xl bg-white shadow-xs text-slate-600 group-hover:bg-sky-600 group-hover:text-white transition-all text-xs">
+                              ➔
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI Agent 頁面 */}
+            {activeTab === 'ai-agent' && (
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="p-6 rounded-[28px] bg-white border border-sky-100 shadow-sm space-y-5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center font-bold text-lg">
+                        🤖
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900">{t.aiAgent}</h2>
+                        <p className="text-xs text-slate-500">創作者個人版：無限制無限次出題</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                      ⚡ 暢用無極限
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="block text-xs font-semibold text-slate-700">考試主題 / 關鍵字</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        placeholder="例如：核心文法片語、基礎觀念測驗..."
+                        value={aiTopic}
+                        onChange={(e) => setAiTopic(e.target.value)}
+                        className="flex-1 px-4 py-2.5 rounded-2xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      />
+                      <button 
+                        onClick={handleAiGenerateCards}
+                        disabled={isAiGenerating}
+                        className="px-5 py-2.5 rounded-2xl bg-sky-600 text-white font-semibold text-xs hover:bg-sky-700 disabled:opacity-50 flex items-center space-x-1"
+                      >
+                        <span>{isAiGenerating ? '生成中...' : '生成卡牌'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {aiGeneratedCards.length > 0 && (
+                    <div className="pt-4 border-t border-slate-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-800">✨ AI 產出預覽：</h3>
+                        <div className="flex items-center space-x-2">
+                          <select 
+                            value={aiTargetDeckId}
+                            onChange={(e) => setAiTargetDeckId(e.target.value)}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50"
+                          >
+                            {decks.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+                          </select>
+                          <button 
+                            onClick={handleImportAiCards}
+                            className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
+                          >
+                            匯入牌組
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {aiGeneratedCards.map((c, i) => (
+                          <div key={i} className="p-4 rounded-2xl bg-sky-50/50 border border-sky-100 text-xs space-y-1">
+                            <p className="font-bold text-slate-800">Q: {c.front}</p>
+                            <p className="text-slate-600 whitespace-pre-line">A: {c.back}</p>
+                            {c.hint && <p className="text-amber-600">💡 提示：{c.hint}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 刷題頁面 */}
+            {activeTab === 'study' && (
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="flex items-center justify-between">
+                  <button onClick={() => setActiveTab('decks')} className="text-xs font-semibold text-slate-500 hover:text-slate-800">
+                    ← {t.myDecks}
+                  </button>
+                  {!sessionCompleted && studyQueue.length > 0 && (
+                    <span className="text-xs text-slate-500 bg-white px-3 py-1 rounded-xl border border-slate-200">
+                      進度: {currentCardIndex + 1} / {studyQueue.length}
+                    </span>
+                  )}
+                </div>
+
+                {sessionCompleted ? (
+                  <div className="p-8 rounded-[28px] bg-white border border-slate-200 text-center space-y-4 shadow-xs">
+                    <h2 className="text-xl font-bold text-slate-900">🎉 今日複習任務完成！</h2>
+                    <p className="text-xs text-slate-500">SM-2 遺忘曲線已為您排定最佳下次複習時間。</p>
+                    <button onClick={() => setActiveTab('decks')} className="px-6 py-2.5 rounded-2xl bg-sky-600 text-white text-xs font-semibold">
+                      {t.myDecks}
+                    </button>
+                  </div>
+                ) : studyQueue.length === 0 ? (
+                  <div className="p-8 rounded-[28px] bg-white border border-slate-200 text-center space-y-4">
+                    <h3 className="text-base font-bold text-slate-800">此牌組目前無待複習卡片</h3>
+                    <button onClick={() => setActiveTab('add')} className="px-4 py-2 rounded-2xl bg-sky-600 text-white text-xs font-semibold">
+                      {t.addCard}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    <div onClick={() => setIsFlipped(!isFlipped)} className="w-full min-h-[340px] p-8 rounded-[28px] bg-white border border-slate-200 shadow-md flex flex-col justify-between text-center cursor-pointer">
+                      <div className="text-xs text-slate-400 border-b border-slate-100 pb-3 flex justify-between">
+                        <span>🏷️ {studyQueue[currentCardIndex]?.tags?.join(' • ') || '知識點'}</span>
+                        <span>{isFlipped ? '💡 點擊收起答案' : '👉 點擊翻面看解答'}</span>
+                      </div>
+
+                      <div className="my-auto py-4 space-y-3">
+                        {!isFlipped ? (
+                          <div className="space-y-3">
+                            {studyQueue[currentCardIndex]?.frontImg && (
+                              <img src={studyQueue[currentCardIndex].frontImg} alt="問題附圖" className="max-h-48 object-contain rounded-2xl mx-auto border border-slate-100" />
+                            )}
+                            <p className="text-lg font-bold text-slate-800">{studyQueue[currentCardIndex]?.front}</p>
+                            {studyQueue[currentCardIndex]?.hint && (
+                              <div className="mt-2">
+                                {showHint ? (
+                                  <p className="text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-xl inline-block">💡 {studyQueue[currentCardIndex]?.hint}</p>
+                                ) : (
+                                  <button onClick={(e) => { e.stopPropagation(); setShowHint(true); }} className="text-xs text-sky-600 underline">[顯示提示]</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-left space-y-3">
+                            {studyQueue[currentCardIndex]?.backImg && (
+                              <img src={studyQueue[currentCardIndex].backImg} alt="解答附圖" className="max-h-48 object-contain rounded-2xl border border-slate-100" />
+                            )}
+                            <div className="text-sm font-medium text-slate-800 bg-slate-50 p-4 rounded-2xl border border-slate-100 whitespace-pre-line">
+                              {studyQueue[currentCardIndex]?.back}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-3">
+                        SM-2 間隔排程控制中
+                      </div>
+                    </div>
+
+                    {isFlipped ? (
+                      <div className="grid grid-cols-4 gap-2">
+                        <button onClick={() => handleRating(1)} className="py-3 rounded-2xl bg-rose-50 text-rose-700 font-semibold text-xs border border-rose-200">
+                          重來 (&lt;1天)
+                        </button>
+                        <button onClick={() => handleRating(2)} className="py-3 rounded-2xl bg-amber-50 text-amber-700 font-semibold text-xs border border-amber-200">
+                          困難 (1-2天)
+                        </button>
+                        <button onClick={() => handleRating(3)} className="py-3 rounded-2xl bg-sky-50 text-sky-700 font-semibold text-xs border border-sky-200">
+                          良好 (3-5天)
+                        </button>
+                        <button onClick={() => handleRating(4)} className="py-3 rounded-2xl bg-emerald-50 text-emerald-700 font-semibold text-xs border border-emerald-200">
+                          簡單 (7天+)
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setIsFlipped(true)} className="w-full py-3.5 rounded-2xl bg-sky-600 text-white font-semibold text-xs shadow-md">
+                        翻開答案
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 手動卡牌 */}
+            {activeTab === 'add' && (
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="p-6 rounded-[28px] bg-white border border-slate-200 shadow-xs space-y-5">
+                  <div className="border-b border-slate-100 pb-3">
+                    <h2 className="text-lg font-bold text-slate-900">{t.addCard}</h2>
+                    <p className="text-xs text-slate-500">支援上傳相簿照片或題目截圖。</p>
+                  </div>
+
+                  <form onSubmit={handleCreateCard} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">歸屬牌組</label>
+                      <select value={cardDeckId} onChange={(e) => setCardDeckId(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs bg-slate-50" required>
+                        {decks.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-slate-700">正面 (問題 / 題目)</label>
+                      <textarea rows={3} placeholder="請輸入題目文字..." value={cardFront} onChange={(e) => setCardFront(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs" required />
+                      <div className="flex items-center space-x-3">
+                        <label className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-medium cursor-pointer hover:bg-slate-200">
+                          📷 上傳正面相片/截圖
+                          <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setCardFrontImg)} className="hidden" />
+                        </label>
+                        {cardFrontImg && (
+                          <div className="relative">
+                            <img src={cardFrontImg} alt="預覽" className="w-10 h-10 object-cover rounded-xl border" />
+                            <button type="button" onClick={() => setCardFrontImg('')} className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] rounded-full px-1">✕</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-slate-700">背面 (正確答案 / 解析)</label>
+                      <textarea rows={4} placeholder="請輸入正確答案與解析..." value={cardBack} onChange={(e) => setCardBack(e.target.value)} className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs" required />
+                      <div className="flex items-center space-x-3">
+                        <label className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-medium cursor-pointer hover:bg-slate-200">
+                          📷 上傳背面相片/解析圖
+                          <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setCardBackImg)} className="hidden" />
+                        </label>
+                        {cardBackImg && (
+                          <div className="relative">
+                            <img src={cardBackImg} alt="預覽" className="w-10 h-10 object-cover rounded-xl border" />
+                            <button type="button" onClick={() => setCardBackImg('')} className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] rounded-full px-1">✕</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">小提示 (選填)</label>
+                        <input type="text" placeholder="提示關鍵字" value={cardHint} onChange={(e) => setCardHint(e.target.value)} className="w-full px-3.5 py-2 rounded-xl border text-xs" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">標籤 (以逗號分隔)</label>
+                        <input type="text" placeholder="重點, 考題" value={cardTags} onChange={(e) => setCardTags(e.target.value)} className="w-full px-3.5 py-2 rounded-xl border text-xs" />
+                      </div>
+                    </div>
+
+                    <button type="submit" className="w-full py-3 rounded-2xl bg-sky-600 text-white font-semibold text-xs shadow-md">
+                      儲存卡片
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* 學習分析 + 考題包變現按鈕 */}
+            {activeTab === 'stats' && (
+              <div className="max-w-3xl mx-auto space-y-6">
+                
+                <div className="p-6 rounded-[28px] bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md flex items-center justify-between">
+                  <div>
+                    <span className="text-xs uppercase tracking-wider font-semibold opacity-80">Streak System</span>
+                    <h2 className="text-2xl font-bold mt-1">🔥 {t.streak}：{getStreakCount()} 天</h2>
+                    <p className="text-xs opacity-90 mt-1">{t.todayCount} {todayReviewCount} 張卡片！對抗遺忘曲線。</p>
+                  </div>
+
+                  <button 
+                    onClick={handleExportPack}
+                    className="px-4 py-2.5 rounded-2xl bg-white text-blue-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"
+                  >
+                    {t.exportPack}
+                  </button>
+                </div>
+
+                <div className="p-6 rounded-[28px] bg-white border border-slate-200 shadow-xs space-y-3">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                    <span>📊</span>
+                    <span>{t.heatmapTitle}</span>
+                  </h3>
+                  
+                  <div className="grid grid-cols-10 gap-2 pt-2">
+                    {getPast30Days().map((dayStr) => {
+                      const count = reviewLogs[dayStr] || 0;
+                      let bgClass = 'bg-slate-100';
+                      if (count > 0 && count <= 5) bgClass = 'bg-sky-200';
+                      else if (count > 5 && count <= 15) bgClass = 'bg-sky-400';
+                      else if (count > 15) bgClass = 'bg-blue-600 text-white';
+
+                      return (
+                        <div 
+                          key={dayStr}
+                          title={`${dayStr}: ${count} reviewed`}
+                          className={`h-8 rounded-lg ${bgClass} flex items-center justify-center text-[10px] font-medium transition-all`}
+                        >
+                          {count > 0 ? count : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1">
+                    <span>30 天前</span>
+                    <span>今天</span>
+                  </div>
+                </div>
+
+                <div className="p-6 rounded-[28px] bg-white border border-slate-200 shadow-xs space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 flex justify-between items-center">
+                    <span>🎓 {t.domainTitle}</span>
+                    <span className="text-xs text-sky-600 font-semibold">SM-2 演算法即時換算</span>
+                  </h3>
+
+                  <div className="space-y-4">
+                    {Object.keys(getCategoryAnalytics()).length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-4">尚無牌組數據，請新增卡片後開始複習。</p>
+                    ) : (
+                      Object.entries(getCategoryAnalytics()).map(([catName, catData]) => {
+                        const masteryRate = catData.totalCards > 0 ? Math.round((catData.masteredCards / catData.totalCards) * 100) : 0;
+                        const reviewRate = catData.totalCards > 0 ? Math.round((catData.reviewCards / catData.totalCards) * 100) : 0;
+
+                        return (
+                          <div key={catName} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold text-slate-800 px-2.5 py-0.5 rounded-full bg-white border border-slate-200">
+                                📌 領域：{catName}
+                              </span>
+                              <span className="text-xs font-bold text-emerald-600">
+                                精通率：{masteryRate}%
+                              </span>
+                            </div>
+
+                            <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden flex">
+                              <div className="bg-emerald-500 h-full" style={{ width: `${masteryRate}%` }}></div>
+                              <div className="bg-sky-400 h-full" style={{ width: `${reviewRate}%` }}></div>
+                            </div>
+
+                            <div className="flex justify-between text-[11px] text-slate-500 pt-1">
+                              <span>總卡片：{catData.totalCards} 張</span>
+                              <span>精通：{catData.masteredCards} 張 | 溫習：{catData.reviewCards} 張</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </main>
+
+          {/* Modal */}
+          {showDeckModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-[28px] max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingDeck ? '編輯牌組設定' : '建立新牌組主題'}
+                  </h3>
+                  <button onClick={closeDeckModal} className="text-slate-400 hover:text-slate-600 p-1 text-sm font-bold">✕</button>
+                </div>
+
+                <form onSubmit={handleSaveDeck} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">牌組名稱</label>
+                    <input 
+                      type="text"
+                      placeholder="例如：語言檢定高頻單字、歷屆試題彙整..."
+                      value={deckTitle}
+                      onChange={(e) => setDeckTitle(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">分類標籤 / 領域</label>
+                    <input 
+                      type="text"
+                      placeholder="例如：必考單字、核心觀念、重點複習..."
+                      value={deckCategory}
+                      onChange={(e) => setDeckCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">牌組描述 (選填)</label>
+                    <textarea 
+                      rows={2}
+                      placeholder="記錄此牌組的考試目標或範圍..."
+                      value={deckDesc}
+                      onChange={(e) => setDeckDesc(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-2xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">🎨 選擇牌組主題色彩</label>
+                    <div className="flex items-center space-x-2">
+                      {DECK_COLORS.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setDeckColorId(c.id)}
+                          className={`w-7 h-7 rounded-full border-2 transition-all flex items-center justify-center ${c.accentBg} ${deckColorId === c.id ? 'border-slate-800 scale-110' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                        >
+                          {deckColorId === c.id && <span className="text-white text-[10px]">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end space-x-2">
+                    <button type="button" onClick={closeDeckModal} className="px-4 py-2 rounded-2xl bg-slate-100 text-slate-600 text-xs font-medium">取消</button>
+                    <button type="submit" className="px-5 py-2 rounded-2xl bg-sky-600 text-white text-xs font-semibold shadow-sm">儲存</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* 底部導覽列 */}
+          <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200/80 px-6 py-2.5 z-30">
+            <div className="max-w-md mx-auto flex items-center justify-around">
+              <button onClick={() => setActiveTab('decks')} className={`flex flex-col items-center space-y-1 ${activeTab === 'decks' ? 'text-sky-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}>
+                <span className="text-base">📚</span>
+                <span className="text-[10px]">{t.myDecks}</span>
+              </button>
+
+              <button onClick={() => setActiveTab('ai-agent')} className={`flex flex-col items-center space-y-1 ${activeTab === 'ai-agent' ? 'text-sky-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}>
+                <span className="text-base">🤖</span>
+                <span className="text-[10px]">{t.aiAgent}</span>
+              </button>
+
+              <button onClick={() => { if (selectedDeckId) startStudy(selectedDeckId); else if (decks.length > 0) startStudy(decks[0].id); }} className={`flex flex-col items-center space-y-1 ${activeTab === 'study' ? 'text-sky-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}>
+                <span className="text-base">📖</span>
+                <span className="text-[10px]">{t.study}</span>
+              </button>
+
+              <button onClick={() => setActiveTab('add')} className={`flex flex-col items-center space-y-1 ${activeTab === 'add' ? 'text-sky-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}>
+                <span className="text-base">➕</span>
+                <span className="text-[10px]">{t.addCard}</span>
+              </button>
+
+              <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center space-y-1 ${activeTab === 'stats' ? 'text-sky-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}>
+                <span className="text-base">📊</span>
+                <span className="text-[10px]">{t.stats}</span>
+              </button>
+            </div>
+          </nav>
+
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
+
